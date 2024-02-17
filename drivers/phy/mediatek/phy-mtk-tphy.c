@@ -1343,7 +1343,9 @@ static void u2_phy_instance_power_on(struct mtk_tphy *tphy,
 		writel(tmp, com + U3P_U2PHYDTM0);
 	}
 
-#if (defined CONFIG_MACH_MT6781) || (defined CONFIG_MACH_MT6768)
+/*C3T code for HQ-233949 by gengyifei at 2022/8/20 start*/
+#if (defined CONFIG_MACH_MT6781)
+/*C3T code for HQ-233949 by gengyifei at 2022/8/20 end*/
 	/* set SW_BC11_EN as 0 which is usb control DPDM */
 	u2_phy_instance_set_mode_ext(tphy, instance, PHY_MODE_BC11_SW_CLR);
 #endif
@@ -1353,10 +1355,9 @@ static void u2_phy_instance_power_on(struct mtk_tphy *tphy,
 	/* HQA Setting */
 	tmp = readl(com + U3P_USBPHYACR6);
 	tmp &= ~PA6_RG_U2_DISCTH;
-	if (instance->eye_disc)
-		tmp |= PA6_RG_U2_DISCTH_VAL(instance->eye_disc);
-	else
-		tmp |= PA6_RG_U2_DISCTH_VAL(0xf);
+	/*C3T code for HQ-258662 by gengyifei at 2022/10/28 start*/
+	tmp |= PA6_RG_U2_DISCTH_VAL(0xa);
+	/*C3T code for HQ-258662 by gengyifei at 2022/10/28 end*/
 	writel(tmp, com + U3P_USBPHYACR6);
 #endif
 	dev_info(tphy->dev, "%s(%d)\n", __func__, index);
@@ -1443,7 +1444,9 @@ static void u2_phy_instance_power_off(struct mtk_tphy *tphy,
 		writel(tmp, com + U3D_U2PHYDCR0);
 	}
 
-#if (defined CONFIG_MACH_MT6781) || (defined CONFIG_MACH_MT6768)
+/*C3T code for HQ-233949 by gengyifei at 2022/8/20 start*/
+#if (defined CONFIG_MACH_MT6781)
+/*C3T code for HQ-233949 by gengyifei at 2022/8/20 end*/
 	/*
 	 * set SW_BC11_EN as 0 which is charger control DPDM
 	 * to disable USB DPDM

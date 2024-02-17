@@ -851,6 +851,10 @@ enum ISP_HALT_DMA_ENUM {
 #define COMPAT_ISP_SET_MEM_INFO       \
 	_IOWR(ISP_MAGIC, ISP_CMD_SET_MEM_INFO, \
 					struct compat_ISP_MEM_INFO_STRUCT)
+/* C3T code for HQ-254101 by liyang at 2022/10/12 start */
+#define COMPAT_ISP_SET_VIR_CQCNT      \
+	_IOWR(ISP_MAGIC, ISP_CMD_SET_VIR_CQCNT, unsigned int)
+/* C3T code for HQ-254101 by liyang at 2022/10/12 end */
 #endif
 
 int32_t ISP_MDPClockOnCallback(uint64_t engineFlag);
