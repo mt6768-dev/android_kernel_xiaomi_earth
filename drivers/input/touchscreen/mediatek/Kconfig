@@ -179,14 +179,7 @@ config TOUCHSCREEN_HIMAX_CHIPSET
 
 	If unsure, say N.
 source "drivers/input/touchscreen/mediatek/hxchipset_hx83102p/Kconfig"
-
-# C3T code for HQ-218848 by chenzimo at 2022/08/23 start
 source "drivers/input/touchscreen/mediatek/goodix_berlin_driver/Kconfig"
 source "drivers/input/touchscreen/mediatek/ft8057/Kconfig"
-source "drivers/input/touchscreen/mediatek/xiaomi/Kconfig"
-# C3T code for HQ-218848 by chenzimo at 2022/08/23 end
-
-# C3T code for chipone_icnl9916 tp bring up by jishen at 2022/09/26 start 
 source "drivers/input/touchscreen/mediatek/chipone_ICNL_9916/Kconfig"
-# C3T code for chipone_icnl9916 tp bring up by jishen at 2022/09/26 end
 endif
