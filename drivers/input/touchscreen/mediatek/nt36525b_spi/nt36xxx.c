@@ -2679,6 +2679,13 @@ return:
 *******************************************************/
 static int32_t nvt_ts_resume(struct device *dev)
 {
+	if (delayed_work_pending(&ts->nvt_fwu_work)) {
+		if (cancel_delayed_work_sync(&ts->nvt_fwu_work)) {
+			schedule_work(&ts->nvt_fwu_work.work);
+			flush_work(&ts->nvt_fwu_work.work);
+		}
+	}
+
 /*C3T code for HQ-218218 by chenzimo at 2022/8/09 start*/
 	if (bTouchIsAwake && !proximity_event) {
 		NVT_LOG("Touch is already resume\n");
