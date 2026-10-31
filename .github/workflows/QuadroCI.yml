@@ -1,0 +1,150 @@
+name: Quadro CI
+
+on:          
+  workflow_dispatch:
+    inputs:
+      defconfig:
+        description: "Defconfig"
+        required: true
+        default: "earth_defconfig"
+
+env:
+  ARCH: arm64
+  DEFCONFIG: ${{ github.event.inputs.defconfig || 'earth_defconfig' }}
+  KERNEL_NAME: Quadro
+  BUILDER: github-actions
+  BUILD_HOST: github
+  LOCALVERSION: -ci
+  CCACHE_DIR: /home/runner/.ccache
+  CLANG_URL: https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/28337064939c0b4bb5804cddf35fb03d860edcf6/clang-r614150.tar.gz
+  CLANG_DIR: /home/runner/toolchain/clang
+  AK3_REPO: https://github.com/JeanneDarc-star/AnyKernel3.git
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out kernel source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Restore Clang tarball
+        id: clang-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/toolchain/clang-r614150.tar.gz
+          key: clang-r614150-28337064
+
+      - name: Download Clang
+        if: steps.clang-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/toolchain
+          curl -fL --retry 5 --retry-delay 5 -o ~/toolchain/clang-r614150.tar.gz "$CLANG_URL"
+
+      - name: Prepare environment
+        run: |
+          echo "SHORT_SHA=${GITHUB_SHA:0:12}" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
+
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ccache zip bc bison flex libssl-dev libelf-dev cpio lz4 \
+            python3 gcc-aarch64-linux-gnu gcc-arm-linux-gnueabihf
+
+          # archive googlesource tidak punya top-level dir
+          mkdir -p "$CLANG_DIR"
+          tar -xzf ~/toolchain/clang-r614150.tar.gz -C "$CLANG_DIR"
+          echo "$CLANG_DIR/bin" >> $GITHUB_PATH
+
+          ccache --max-size=2G
+          ccache --zero-stats
+
+      - name: Restore ccache
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ runner.os }}-
+
+      - name: Compile kernel
+        run: |
+          set -o pipefail
+          clang --version | head -n1
+
+          export KBUILD_BUILD_USER="$BUILDER"
+          export KBUILD_BUILD_HOST="$BUILD_HOST"
+          export LOCALVERSION="$LOCALVERSION"
+
+          rm -f out/arch/${ARCH}/boot/Image.gz-dtb 2>/dev/null || true
+          mkdir -p out
+
+          make O=out ARCH=${ARCH} ${DEFCONFIG}
+
+          START=$(date +%s)
+
+          make -j"$(nproc --all)" O=out LLVM=1 \
+            ARCH=${ARCH} \
+            LD=ld.lld \
+            AR=llvm-ar \
+            AS=llvm-as \
+            NM=llvm-nm \
+            OBJDUMP=llvm-objdump \
+            STRIP=llvm-strip \
+            CC="ccache clang" \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabihf- \
+            CONFIG_NO_ERROR_ON_MISMATCH=y \
+            CONFIG_DEBUG_SECTION_MISMATCH=y \
+            V=0 2>&1 | tee out/build.log
+
+          END=$(date +%s)
+          DIFF=$((END - START))
+          echo "Build time: $((DIFF / 60))m $((DIFF % 60))s"
+
+      - name: Show ccache stats
+        run: ccache --show-stats
+
+      - name: Package with AnyKernel3
+        run: |
+          ZIPN="${KERNEL_NAME}-${BUILD_DATE}-${SHORT_SHA}"
+          echo "ZIPN=${ZIPN}" >> $GITHUB_ENV
+
+          git clone --depth=1 "$AK3_REPO" ~/anykernel
+          BOOT="$GITHUB_WORKSPACE/out/arch/${ARCH}/boot"
+
+          # Image.gz-dtb > Image.gz > Image
+          if   [ -f "$BOOT/Image.gz-dtb" ]; then cp "$BOOT/Image.gz-dtb" ~/anykernel/
+          elif [ -f "$BOOT/Image.gz" ];     then cp "$BOOT/Image.gz"     ~/anykernel/
+          elif [ -f "$BOOT/Image" ];        then cp "$BOOT/Image"        ~/anykernel/
+          else echo "No kernel image found in $BOOT"; exit 1
+          fi
+
+          # opsional: dtbo
+          [ -f "$BOOT/dtbo.img" ] && cp "$BOOT/dtbo.img" ~/anykernel/
+
+          cd ~/anykernel
+          zip -r9 "${ZIPN}.zip" * -x .git README.md '*placeholder'
+
+          mkdir -p "$GITHUB_WORKSPACE/out/target"
+          sha512sum "${ZIPN}.zip" | tee "$GITHUB_WORKSPACE/out/target/${ZIPN}.zip.sha512"
+          mv "${ZIPN}.zip" "$GITHUB_WORKSPACE/out/target/"
+
+      - name: Upload zip
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.ZIPN }}
+          path: |
+            out/target/${{ env.ZIPN }}.zip
+            out/target/${{ env.ZIPN }}.zip.sha512
+          if-no-files-found: error
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-log
+          path: out/build.log
+          if-no-files-found: ignore
